@@ -1,0 +1,10 @@
+flask==2.2.3
+Werkzeug==2.2.3
+flask-cors==3.0.10
+pyspark==3.3.2
+pymongo==4.3.3
+pandas==1.5.3
+numpy==1.24.2
+pyarrow==11.0.0
+cloudpickle==2.2.1
+openai>=1.0.0
