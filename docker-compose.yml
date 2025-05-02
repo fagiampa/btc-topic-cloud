@@ -1,0 +1,35 @@
+version: '3'
+
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - btc_network
+
+  spark-flask:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: spark-flask
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./backend:/btcTopic
+    depends_on:
+      - mongodb
+    environment:
+      - MONGO_URI=mongodb://mongodb:27017/
+    networks:
+      - btc_network
+
+networks:
+  btc_network:
+    driver: bridge
+
+volumes:
+  mongo_data:
