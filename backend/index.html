@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bitcoin Topic Cloud</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3-cloud/1.2.5/d3.layout.cloud.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1a1a1a;
+            color: #f0f0f0;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            color: #f8b400;
+            margin-bottom: 30px;
+        }
+        .topics-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 20px;
+        }
+        .time-selector {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        .time-btn {
+            background-color: #333;
+            color: #fff;
+            border: none;
+            padding: 10px 15px;
+            margin: 0 5px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .time-btn.active {
+            background-color: #f8b400;
+            color: #1a1a1a;
+        }
+        .word-cloud-container {
+            width: 100%;
+            height: 500px;
+            background-color: #242424;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+            position: relative;
+        }
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #666;
+            font-size: 20px;
+        }
+        .update-info {
+            text-align: center;
+            color: #999;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+        svg text {
+            cursor: pointer;
+        }
+        .empty-state {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #666;
+            font-size: 18px;
+            text-align: center;
+            max-width: 80%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Bitcoin Topic Cloud</h1>
+        
+        <div class="time-selector" id="timeButtons">
+            <button class="time-btn active" data-time="latest">Latest Data</button>
+            <button class="time-btn" data-time="day">Last 24 Hours</button>
+            <button class="time-btn" data-time="week">Last Week</button>
+        </div>
+        
+        <div class="word-cloud-container">
+            <div class="loading" id="loading">Loading topics...</div>
+            <div class="empty-state" id="emptyState" style="display: none;">
+                No topics available for this time frame. Try selecting a different time period.
+            </div>
+            <div id="wordcloud"></div>
+        </div>
+        
+        <div class="update-info" id="updateInfo">
+            Last updated: <span id="lastUpdated">-</span>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const API_BASE_URL = '/api/topics';
+        const UPDATE_INTERVAL = 180000; // 3 minutes
+        
+        // Define color scale based on font size
+        // Direct mapping from size to color without gradation
+        const colorScale = d3.scaleQuantize()
+            .domain([10, 60]) // Min and max font size
+            .range([
+                '#4363d8', // Small text (blue)
+                '#3498db',
+                '#1abc9c',
+                '#2ecc71',
+                '#f1c40f',
+                '#e67e22',
+                '#e74c3c',
+                '#e6194B'  // Large text (red)
+            ]);
+        
+        let currentTimeFrame = 'latest';
+        let wordcloudLayout;
+        let wordcloudSvg;
+        let width = 0;
+        let height = 0;
+        
+        // Initialization
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeWordCloud();
+            initializeTimeButtons();
+            fetchTopics(currentTimeFrame);
+            
+            // Update periodically
+            setInterval(() => fetchTopics(currentTimeFrame), UPDATE_INTERVAL);
+        });
+        
+        function initializeTimeButtons() {
+            const buttons = document.querySelectorAll('.time-btn');
+            buttons.forEach(btn => {
+                btn.addEventListener('click', function() {
+                    setActiveTimeFrame(this.dataset.time);
+                });
+            });
+        }
+        
+        function initializeWordCloud() {
+            const container = document.getElementById('wordcloud');
+            width = container.parentElement.clientWidth;
+            height = container.parentElement.clientHeight;
+            
+            wordcloudSvg = d3.select('#wordcloud')
+                .append('svg')
+                .attr('width', width)
+                .attr('height', height);
+            
+            // Create cloud layout
+            wordcloudLayout = d3.layout.cloud()
+                .size([width, height])
+                .padding(5)
+                .rotate(function() { return 0; }) // All words horizontal
+                .font('Impact')
+                .fontSize(function(d) { return d.size; })
+                .spiral('archimedean') // Better organization from center outward
+                .text(function(d) { return d.text; });
+        }
+        
+        function fetchTopics(timeFrame) {
+            d3.select('#loading').style('display', 'block');
+            d3.select('#emptyState').style('display', 'none');
+            
+            // Update API URL to include time frame parameter
+            const apiUrl = `${API_BASE_URL}?time_frame=${timeFrame}`;
+            
+            fetch(apiUrl)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Check if we have valid data
+                    if (!data || data.length === 0) {
+                        showEmptyState();
+                        return;
+                    }
+                    
+                    updateWordCloud(data);
+                    d3.select('#loading').style('display', 'none');
+                    d3.select('#lastUpdated').text(new Date().toLocaleTimeString());
+                })
+                .catch(error => {
+                    console.error('Error fetching topics:', error);
+                    d3.select('#loading').style('display', 'none');
+                    d3.select('#emptyState').style('display', 'block');
+                    d3.select('#emptyState').text('Error loading topics. Please try again later.');
+                });
+        }
+        
+        function showEmptyState() {
+            d3.select('#loading').style('display', 'none');
+            d3.select('#emptyState').style('display', 'block');
+            // Clear any existing word cloud
+            wordcloudSvg.selectAll('*').remove();
+        }
+        
+        function setActiveTimeFrame(timeFrame) {
+            currentTimeFrame = timeFrame;
+            
+            // Update active button state
+            document.querySelectorAll('.time-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.time === timeFrame) {
+                    btn.classList.add('active');
+                }
+            });
+            
+            // Fetch topics for the selected time frame
+            fetchTopics(timeFrame);
+        }
+        
+        function updateWordCloud(topics) {
+            let words = [];
+            
+            if (!topics || topics.length === 0) {
+                showEmptyState();
+                return;
+            }
+            
+            // Combine words from all topics
+            topics.forEach(topic => {
+                topic.terms.forEach(([text, value]) => {
+                    const existingWord = words.find(w => w.text === text);
+                    if (existingWord) {
+                        existingWord.size = Math.max(existingWord.size, value / 2 + 10);
+                    } else {
+                        words.push({
+                            text: text,
+                            size: value / 2 + 10, // Scale for visualization
+                        });
+                    }
+                });
+            });
+            
+            // Sort words by size (largest first) to prioritize central placement
+            words.sort((a, b) => b.size - a.size);
+            
+            // Update cloud layout
+            wordcloudLayout
+                .words(words)
+                .on('end', drawWordCloud);
+                
+            wordcloudLayout.start();
+        }
+        
+        function drawWordCloud(words) {
+            // Clear previous word cloud
+            wordcloudSvg.selectAll('*').remove();
+            
+            if (words.length === 0) {
+                showEmptyState();
+                return;
+            }
+            
+            // Draw new word cloud
+            const cloud = wordcloudSvg
+                .append('g')
+                .attr('transform', `translate(${width/2},${height/2})`)
+                .selectAll('text')
+                .data(words)
+                .enter()
+                .append('text')
+                .style('font-size', d => `${d.size}px`)
+                .style('font-family', 'Impact')
+                .style('fill', d => colorScale(d.size)) // Direct mapping of size to color
+                .attr('text-anchor', 'middle')
+                .attr('transform', d => `translate(${d.x},${d.y})`) // No rotation
+                .text(d => d.text)
+                .on('mouseover', function() {
+                    d3.select(this)
+                        .transition()
+                        .duration(200)
+                        .style('font-size', d => `${d.size * 1.3}px`)
+                        .style('opacity', 1);
+                })
+                .on('mouseout', function() {
+                    d3.select(this)
+                        .transition()
+                        .duration(200)
+                        .style('font-size', d => `${d.size}px`)
+                        .style('opacity', 0.9);
+                });
+            
+            // Entrance animation
+            cloud
+                .style('opacity', 0)
+                .transition()
+                .duration(800)
+                .style('opacity', 0.9);
+        }
+    </script>
+</body>
+</html>
