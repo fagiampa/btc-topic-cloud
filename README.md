@@ -135,6 +135,3 @@ bitcoin-topic-cloud/
 
 Contributi, issue e feature request sono benvenuti! Sentiti libero di controllare la pagina [issues](https://github.com/yourusername/bitcoin-topic-cloud/issues).
 
-## 📄 Licenza
-
-Questo progetto è distribuito con licenza MIT. Vedi il file `LICENSE` per maggiori informazioni.
