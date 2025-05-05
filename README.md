@@ -2,7 +2,7 @@
 
 Un'applicazione web che analizza i tweet su Bitcoin, identifica i principali argomenti di discussione e li visualizza in una word cloud interattiva. L'applicazione utilizza una pipeline di elaborazione dati con PySpark, MongoDB, Flask e D3.js.
 
-![Screenshot dell'applicazione](./screenshots/docs/images/Word%Cloud%Example.png)
+![Screenshot dell'applicazione](./screenshots/docs/images/WordCloudExample.png)
 
 ## 🔍 Panoramica
 
